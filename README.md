@@ -27,5 +27,7 @@ One example can be found in `examples/`
 
 - Simple agent (`examples/dqn_agent.py`)
 
+Read more about this example at our [Trading Gym](https://github.com/Prediction-Machines/Trading-Gym)
+
 
 *Copyright © 2017 RKR Epsilon UK Ltd. All rights reserved.*
