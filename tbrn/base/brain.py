@@ -5,7 +5,7 @@ class Brain(object):
     agent or environment specific, depending on action
     """
 
-    def train(self, X, y, w=None, *args):
+    def train(self, X, y, *args):
         """Training function.
 
         Args:

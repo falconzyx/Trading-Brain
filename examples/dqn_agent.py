@@ -12,32 +12,33 @@ if __name__=="__main__":
     from tgym.gens.deterministic import WavySignal
     # Instantiating the environmnent
     generator = WavySignal(period_1=25, period_2=50, epsilon=-0.5)
-    episodes = 20
-    game_length = 400
+    episodes = 100
+    episode_length = 500
     trading_fee = .2
     time_fee = 0
     history_length = 2
+    #data_generator, spread_coefficients, episode_length=1000, trading_fee=0, time_fee=0, history_length=2):
     environment = SpreadTrading(spread_coefficients=[1],
                                 data_generator=generator,
                                 trading_fee=trading_fee,
                                 time_fee=time_fee,
                                 history_length=history_length,
-                                game_length=game_length)
+                                episode_length=episode_length)
     state = environment.reset()
     # Instantiating the agent
-    memory_size = 3000
+    memory_size = 1000
     state_size = len(state)
-    gamma = 0.96
+    gamma = 0.99
     epsilon_min = 0.01
     batch_size = 64
     action_size = len(SpreadTrading._actions)
-    train_interval = 10
-    learning_rate = 0.001
+    train_interval = 1
+    learning_rate = 0.002
     agent = DQNAgent(state_size = state_size,
                      action_size = action_size,
                      memory_size = memory_size,
                      episodes = episodes,
-                     game_length = game_length,
+                     episode_length = episode_length,
                      train_interval = train_interval,
                      gamma = gamma,
                      learning_rate = learning_rate,
@@ -52,7 +53,7 @@ if __name__=="__main__":
     for ep in range(episodes):
         state = environment.reset()
         rew=0
-        for _ in range(game_length):
+        for _ in range(episode_length):
             action = agent.act(state)
             next_state,reward,done,_ = environment.step(action)
             loss = agent.observe(state, action, reward, next_state, done)
@@ -61,12 +62,15 @@ if __name__=="__main__":
         print("Ep:"+str(ep)
             +"| rew:"+str(round(rew,2))
             +"| eps:"+str(round(agent.epsilon,2))
-            +"| loss:"+str(round(loss.history["loss"][0],4)))
+            +"| loss:"+str(round(loss,4)))
     # Running the agent
     done = False
     state = environment.reset()
     while not done:
         action = agent.act(state)
-        state,_,done,_ = environment.step(action)
-        environment.render()
+        state,_,done, info = environment.step(action)
+        if info['status'] == 'Closed plot':
+            done = True
+        else:
+            environment.render()
 
