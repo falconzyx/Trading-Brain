@@ -5,7 +5,7 @@ Training time is short and results are unstable.
 Do not hesitate to run several times and/or tweak parameters to get better results.
 Inspired from https://github.com/keon/deep-q-learning
 """
-from tbrn.agents.keras.dqn_agent import DQNAgent
+from tbrn.agents.keras.keras_agent import KerasAgent
 
 if __name__=="__main__":
     from tgym.envs import SpreadTrading
@@ -13,11 +13,10 @@ if __name__=="__main__":
     # Instantiating the environmnent
     generator = WavySignal(period_1=25, period_2=50, epsilon=-0.5)
     episodes = 100
-    episode_length = 500
+    episode_length = 400
     trading_fee = .2
     time_fee = 0
     history_length = 2
-    #data_generator, spread_coefficients, episode_length=1000, trading_fee=0, time_fee=0, history_length=2):
     environment = SpreadTrading(spread_coefficients=[1],
                                 data_generator=generator,
                                 trading_fee=trading_fee,
@@ -26,15 +25,15 @@ if __name__=="__main__":
                                 episode_length=episode_length)
     state = environment.reset()
     # Instantiating the agent
-    memory_size = 1000
+    memory_size = 3000
     state_size = len(state)
-    gamma = 0.99
+    gamma = 0.96
     epsilon_min = 0.01
     batch_size = 64
     action_size = len(SpreadTrading._actions)
-    train_interval = 1
-    learning_rate = 0.002
-    agent = DQNAgent(state_size = state_size,
+    train_interval = 10
+    learning_rate = 0.0008
+    agent = KerasAgent(state_size = state_size,
                      action_size = action_size,
                      memory_size = memory_size,
                      episodes = episodes,
@@ -69,8 +68,7 @@ if __name__=="__main__":
     while not done:
         action = agent.act(state)
         state,_,done, info = environment.step(action)
-        if info['status'] == 'Closed plot':
+        if 'status' in info and info['status'] == 'Closed plot':
             done = True
         else:
             environment.render()
-

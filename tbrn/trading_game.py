@@ -2,36 +2,11 @@ import numpy as np
 import pickle
 import os
 
-class Game(object):
-    def __init__(self):
-        pass
-    def reset(self):
-        # reset logic
-        return self._get_state()
-    def step(self, action):
-        # step logic
-        return self._get_state(), self._get_reward(), self._is_game_over(), None
-    def render(self):
-        print self._get_state(), self._get_action()
-    def get_q_test(self):
-        raise NotImplementedError('get_q_test not implemented')
-    def showQS(self, qs):
-        pass
-    def getName(self):
-        return self.name
-    def _get_state(self):
-        return self.state
-    def _get_reward(self):
-        return self.reward
-    def _is_game_over(self):
-        if (self.current_step == self.n_steps) | self.exited:
-            return True
-        else:
-            return False
-
+#needed if we want to be showing the q values graphs
 class QHandler(object):
     def __init__(self, init_data, num_st, input_size, output_size):
         self.num_st = num_st
+        self._qs = []
         self.input_size = input_size
         self.output_size = output_size
         self._prepQS(init_data)
@@ -46,18 +21,26 @@ class QHandler(object):
                 pos += 1
         self.testSet = entries
         
+    def sampleQS(self, predict_fn):
+        qv = predict_fn(self.testSet, True)
+        self._qs.append(qv)
+        return qv
+    
+    def getQS(self):
+        return self._qs
+        
     @staticmethod
-    def showQSDetail(ds, translator):
+    def _showQSDetail(ds, translator):
         for i in range(ds.shape[0]):
             print('{0} : {1}'.format(str(ds[i,]), translator(np.argmax(ds[i,]))))
 
     def showQS(self, qs, translator):
         print('for short:')
-        QHandler.showQSDetail(qs[0:self.num_st], translator)
+        QHandler._showQSDetail(qs[0:self.num_st], translator)
         print('for long:')
-        QHandler.showQSDetail(qs[self.num_st:self.num_st*2], translator)
+        QHandler._showQSDetail(qs[self.num_st:self.num_st*2], translator)
         print('for flat:')
-        QHandler.showQSDetail(qs[self.num_st*2:self.num_st*3], translator)
+        QHandler._showQSDetail(qs[self.num_st*2:self.num_st*3], translator)
 
 class DataSource(object):
     def __init__(self, use_random, saveloc, nprod, maxlen, num_st, amp):
@@ -93,7 +76,7 @@ class DataSource(object):
             return self.x[0, self.maxlen-1]
         return self.x[0, self.clock + offset]
 
-class TradingGame(Game):
+class TradingGame(object):
     
     S_FLAT = 2
     S_LONG = 1
@@ -130,9 +113,6 @@ class TradingGame(Game):
         self.rewards = []
         self.actionsmem = []
         self.numChange = 0
-        
-    def get_q_test(self):
-        return self.qhandler.testSet
 
     def reset(self, dorand=False):
         self.data.reset(dorand)

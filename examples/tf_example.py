@@ -1,9 +1,16 @@
+"""
+In this example we demonstrate how to implement a DQN agent and
+train it to trade optimally on a periodic price signal.
+Training time is short and results are slightly unstable.
+Do not hesitate to run several times and/or tweak parameters to get better results.
+Inspired from https://github.com/devsisters/DQN-tensorflow
+"""
+
+
 import random
 import argparse
 import os
-#import time
 from tqdm import tqdm
-#from agent import Agent
 from tbrn.agents.tf.tf_agent import Agent
 from tbrn.trading_game import TradingGame
 from tbrn.config import get_config
@@ -15,6 +22,7 @@ import pickle
 tf.set_random_seed(123)
 random.seed(123)
 
+#Stats module for outputting and keeping statistics while running.
 class Stats(object):
     def __init__(self, test_step):
         self.test_step = test_step
@@ -25,6 +33,7 @@ class Stats(object):
         self.total_reward, self.total_loss, self.total_q = 0., 0., 0.
         self.max_avg_ep_reward = 0
         self.ep_rewards, self.actions = [], []
+    #called after each tick of game
     def update(self, loss, q_t, reward, action):
         if loss is not None:
             self.total_loss += loss
@@ -33,10 +42,12 @@ class Stats(object):
         self.ep_reward += reward
         self.actions.append(action)
         self.total_reward += reward
+    #called at end of a game
     def updateTerminal(self):
         self.num_game += 1
         self.ep_rewards.append(self.ep_reward)
         self.ep_reward = 0.
+    #called every so often to output stats and record for writing to disk at the end
     def tabulate(self, epsilon, step, agent):
         avg_reward = self.total_reward / self.test_step
         if self.update_count > 0:
@@ -81,35 +92,34 @@ class Stats(object):
 
 class Runner(object):
     
-    def __init__(self, env, agent, max_step, learn_start, test_step, saveloc):
+    def __init__(self, env, config, saveloc, load, sess):
         self.env = env
-        self.agent = agent
-        self.max_step = max_step
-        self.learn_start = learn_start
-        self.test_step = test_step
+        self.config = config
+        self.sess = sess
         self.saveloc = saveloc
-        self.statsMgr = Stats(test_step)
         with tf.variable_scope('step'):
             self.step_op = tf.Variable(0, trainable=False, name='step')
             self.step_input = tf.placeholder('int32', None, name='step_input')
             self.step_assign_op = self.step_op.assign(self.step_input)
+        self.agent = Agent(config, sess, load, self.step_op)
+        self.statsMgr = Stats(self.config.test_step)
         
     def train(self):
-        tf.global_variables_initializer().run()
-                
-        max_avg_ep_reward = 0
-    
         state = self.env.reset()
-        
         self.agent.init(state)
-        
-        qv = self.agent.sampleQS(self.env.get_q_test())
+        #show initial random q function
+        qv = self.env.qhandler.sampleQS(self.agent.brain.predict)
         self.env.showQS(qv)
-                    
+        #reset counter in case we loaded from a previous network
+        self.sess.run(self.step_op.assign(0))
         start_step = self.step_op.eval()
+        #do 300 samples of data for charting
+        sample_rate = int(self.config.max_step / 300)
+        #keep track of best result so we save network as we improve
+        max_avg_ep_reward = 0
         
-        for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step, mininterval=1.5):
-            if self.step == self.learn_start:
+        for self.step in tqdm(range(start_step, self.config.max_step), ncols=70, initial=start_step, mininterval=1.5):
+            if self.step == self.config.learn_start:
                 self.statsMgr.clear()
     
             # 1. predict
@@ -124,23 +134,31 @@ class Runner(object):
             if terminal:
                 state = self.env.reset(dorand=True)
                 self.statsMgr.updateTerminal()
-    
-            if self.step >= self.learn_start:
-                if self.step % 500 == 0:
-                    self.agent.sampleQS(self.env.get_q_test())
-                if self.step % self.test_step == self.test_step - 1:
+                
+            #stats accumulation - optional
+            if self.step >= self.config.learn_start:
+                if self.step % sample_rate == 0:
+                    self.env.qhandler.sampleQS(self.agent.brain.predict)
+                if self.step % self.config.test_step == self.config.test_step - 1:
                     avg_ep_reward = self.statsMgr.tabulate(self.agent.getEpsilon(), self.step, self.agent)
+                    #Save the model if it beats it's previous record
                     if max_avg_ep_reward * 0.9 <= avg_ep_reward:
                         self.step_assign_op.eval({self.step_input: self.step + 1})
                         max_avg_ep_reward = max(max_avg_ep_reward, avg_ep_reward)
-                    
-        qv = self.agent.sampleQS(self.env.get_q_test())
+                        self.agent.save_model(self.step + 1)
+
+        #show final q values, and save
+        qv = self.env.qhandler.sampleQS(self.agent.brain.predict)
         self.env.showQS(qv)
         self.save()
+
+    # not implemented yet
+    def run(self):
+        pass
         
     def save(self):
         sv = self.env.getSave()
-        qs = self.agent.getQS()
+        qs = self.env.qhandler.getQS()
         sdict = {'qs':qs, 'game':sv}
         df = self.saveloc + '/out.pkl'
         if os.path.isfile(df):
@@ -151,14 +169,18 @@ class Runner(object):
 
 def main(args):
     with tf.Session() as sess:
+        #get config based on model (default 'trading')
         config = get_config(args)
         saveloc = os.getcwd()
+        #create the game
         w = TradingGame(config, args.maxgamelen, args.random, saveloc)
-        agent = Agent(config, sess)
-        runner = Runner(w, agent, config.max_step, config.learn_start, agent.test_step, saveloc)
+        #create the runner
+        runner = Runner(w, config, saveloc, args.load, sess)
         
         if args.train:
             runner.train()
+        else:
+            runner.run()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This starts the deepq')
@@ -166,13 +188,10 @@ if __name__ == '__main__':
                         required=False, dest='load', action='store_true')
     parser.add_argument('-n', '--notrain', help='Don\'t do training', \
                         required=False, dest='train', action='store_false')
-    parser.add_argument('-m', '--nomacd', help='No MACD', \
-                        required=False, dest='macd', action='store_false')
     parser.add_argument('-r', '--norandom', help='New Random Data', \
                         required=False, dest='random', action='store_false')
     parser.add_argument('--maxgamelen', help='Max length of game', required=False, default=1000, type=int)
-    parser.add_argument('--maxgames', help='Max Games', required=False, default=0, type=int)
-    parser.add_argument('--model', help='Model to load', required=False, default='trading')    
+    parser.add_argument('--model', help='Model to load', required=False, default='trading')
 
     args = parser.parse_args()
     main(args)

@@ -12,7 +12,7 @@ def class_vars(obj):
 
 class ModelSaver(object):
     """Abstract object representing an Reader model."""
-    def __init__(self, config):
+    def __init__(self, config, sess):
         self._saver = None
         self.config = config
 
@@ -23,6 +23,7 @@ class ModelSaver(object):
         pp(self._attrs)
     
         self.config = config
+        self.sess = sess
     
         for attr in self._attrs:
             name = attr if not attr.startswith('_') else attr[1:]
@@ -52,7 +53,7 @@ class ModelSaver(object):
         
     @property
     def checkpoint_dir(self):
-        return os.path.join('checkpoints', self.model_dir)
+        return os.path.join('logs', self.model_dir)
     
     @property
     def model_dir(self):
